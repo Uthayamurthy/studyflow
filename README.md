@@ -17,3 +17,11 @@ Just run:
 ```bash
 fastapi dev backend.py
 ```
+Now you can access the server and api endpoints from:
+```
+127.0.0.1:8000
+```
+To get the docs for the api go to docs url:
+```
+http://127.0.0.1:8000/docs
+```
