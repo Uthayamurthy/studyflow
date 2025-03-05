@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
+from prompts import title_gen_prompt
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
     from api_key import gemini_key
@@ -39,6 +40,21 @@ def create_db():
         os.mkdir("app_data")
         SQLModel.metadata.create_all(engine)
 app = FastAPI(lifespan=lifespan)
+
+def gen_description(user_query: str, session_id: str):
+    message = title_gen_prompt.ingest_args(user_prompt=user_query)
+    response = completion(
+        model="gemini/gemini-2.0-flash-lite", 
+        messages=[{"role": "user", "content": message}]
+    )
+    title = response['choices'][0]['message']['content']
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        result.description = title
+        sql_session.add(result)
+        sql_session.commit()
+        sql_session.refresh(result)
 
 @app.get("/session_ids/", response_model=List[Session_Info])
 def get_session_ids():
@@ -87,6 +103,8 @@ def process_chat(session_id: str, user_query: str):
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
         chat_history = json.loads(result.chat_history)
+        if len(chat_history) == 0:
+            gen_description(user_query, session_id)
         user_chat = {"role": "user", "content": user_query}
         chat_history.append(user_chat)
         response = completion(
