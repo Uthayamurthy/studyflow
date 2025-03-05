@@ -2,6 +2,7 @@ import uuid
 import json
 import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
@@ -12,6 +13,12 @@ try:
 except:
     print("API Key not found. Please create a \"api_key.py\" file and say your key as \"gemini_key='<your_key>'\" ")
     exit(0)
+
+origins = [
+    "http://localhost",
+    "http://localhost:8080",
+    "http://localhost:5173"
+]
 
 class Session_Info(SQLModel, table=True):
     id: str = Field(primary_key=True)
@@ -39,8 +46,16 @@ def create_db():
     except:
         os.mkdir("app_data")
         SQLModel.metadata.create_all(engine)
+
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 def gen_description(user_query: str, session_id: str):
     message = title_gen_prompt.ingest_args(user_prompt=user_query)
     response = completion(
