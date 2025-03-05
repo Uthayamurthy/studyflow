@@ -56,13 +56,13 @@ def gen_description(user_query: str, session_id: str):
         sql_session.commit()
         sql_session.refresh(result)
 
-@app.get("/session_ids/", response_model=List[Session_Info])
+@app.get("/sessions_info/", response_model=List[Session_Info])
 def get_session_ids():
     with Session(engine) as sql_session:
         app_sessions = sql_session.exec(select(Session_Info)).all()
         return app_sessions
 
-@app.get("/new_session_id/", response_model=Session_Info)
+@app.get("/new_session/", response_model=Session_Info)
 def create_new_session():
     new_id = gen_session_key()
     new_session = Session_Info(id=new_id)
@@ -71,7 +71,7 @@ def create_new_session():
         sql_session.commit()
     return {"id": new_id}
 
-@app.delete("/session_id/{session_id}")
+@app.delete("/session/{session_id}")
 def delete_session(session_id: str):
     try:
         with Session(engine) as sql_session:
