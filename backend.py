@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
-from prompts import title_gen_prompt
+from prompts import title_gen_prompt, study_ai_sys_prompt
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
     from api_key import gemini_key
@@ -105,6 +105,7 @@ def process_chat(session_id: str, user_query: str):
         chat_history = json.loads(result.chat_history)
         if len(chat_history) == 0:
             gen_description(user_query, session_id)
+            chat_history.append({"role": "system", "content": study_ai_sys_prompt.ingest_args()})
         user_chat = {"role": "user", "content": user_query}
         chat_history.append(user_chat)
         response = completion(
