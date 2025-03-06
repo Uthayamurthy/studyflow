@@ -5,4 +5,7 @@ litellm
 werkzeug
 langchain
 langchain_community
+langchain-huggingface
+chromadb
+langchain-chroma
 langchain-chroma>=0.1.2

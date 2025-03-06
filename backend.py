@@ -7,9 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
-from prompts import title_gen_prompt, study_ai_sys_prompt
+from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt
 from werkzeug.utils import secure_filename
 from pydantic import BaseModel
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
     from api_key import gemini_key
@@ -19,12 +23,62 @@ except:
 
 UPLOAD_FOLDER = "uploads/"
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx'}
+CHROMA_PERSIST_DIR = "vector_db/"
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+
+embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_session_folder(session_id: str) -> str:
     return os.path.join(UPLOAD_FOLDER, session_id)
+
+def get_chroma_db(session_id: str):
+    if not os.path.isdir(CHROMA_PERSIST_DIR):
+        os.mkdir(CHROMA_PERSIST_DIR)
+    persist_directory = os.path.join(CHROMA_PERSIST_DIR, session_id)
+    if not os.path.exists(persist_directory):
+        os.mkdir(persist_directory)
+    db = Chroma(
+        collection_name=session_id,
+        embedding_function=embeddings,
+        persist_directory=persist_directory,
+    )
+    return db
+
+def process_file(filepath: str, filename : str, db: Chroma, session_id: str):
+    try:
+        if filename.lower().endswith('.txt'):
+            loader = TextLoader(filepath)
+        elif filename.lower().endswith('.pdf'):
+            loader = PyPDFLoader(filepath)
+        elif filename.lower().endswith('.docx'):
+            loader = Docx2txtLoader(filepath)
+        else:
+            raise ValueError(f"Unsupported file type: {filename}")
+
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        texts = text_splitter.split_documents(documents)
+        uuids = [str(uuid.uuid4()) for _ in range(len(documents))]
+        db.add_documents(documents=texts, uuids=uuids)
+        with Session(engine) as sql_session:
+            statement = select(Session_Info).where(Session_Info.id == session_id)
+            result = sql_session.exec(statement).one()
+            files_info = json.loads(result.files_info)
+            files_info.append({"file_id": str(uuid.uuid4()), "filename": filename, "uuid": uuids})
+            result.files_info = json.dumps(files_info)
+            sql_session.add(result)
+            sql_session.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File processing error: {e}")
+
+def retrieve_context(query: str, db: Chroma, k: int = 3) -> str:
+    docs = db.similarity_search(query, k=k)
+    response = "\n\n".join([doc.page_content for doc in docs])
+    print(f'Retrieved Response: {response}')
+    return response
 
 origins = [
     "http://localhost",
@@ -35,7 +89,8 @@ origins = [
 class Session_Info(SQLModel, table=True):
     id: str = Field(primary_key=True)
     description: str | None = Field(default="New Session")
-    chat_history : str | None = Field(default="[]")
+    chat_history: str | None = Field(default="[]")
+    files_info: str | None = Field(default="[]")
     
 sqlite_file_name = "app_data/sessions.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
@@ -111,6 +166,8 @@ def delete_session(session_id: str):
             session = results.one()
             sql_session.delete(session)
             sql_session.commit()
+        shutil.rmtree(get_session_folder(session_id))
+        shutil.rmtree(os.path.join(CHROMA_PERSIST_DIR, session_id))
         return {"message": "Session deleted"}
     except:
         return {"message": "Session not found"}
@@ -142,7 +199,11 @@ def process_chat(user_chat: User_Chat):
         if len(chat_history) == 0:
             gen_description(user_query, session_id)
             chat_history.append({"role": "system", "content": study_ai_sys_prompt.ingest_args()})
-        user_chat = {"role": "user", "content": user_query}
+        db = get_chroma_db(session_id)
+        context = retrieve_context(user_query, db)
+        user_prompt = study_ai_user_prompt.ingest_args(context=context, user_query=user_query)
+        print(f'User Prompt: {user_prompt}')
+        user_chat = {"role": "user", "content": user_prompt}
         chat_history.append(user_chat)
         response = completion(
                model="gemini/gemini-2.0-flash", 
@@ -179,3 +240,8 @@ async def upload_resource(session_id: str, file: UploadFile = File(...)):
 
     with open(filepath, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+
+    db = get_chroma_db(session_id)
+    process_file(filepath, filename, db, session_id)
+
+    return {'message': 'File uploaded successfully !'}
