@@ -64,3 +64,5 @@ docs/_build/
 api_key.py
 
 uploads/
+
+vector_db/
