@@ -121,12 +121,13 @@ def get_chat_data(session_id: str):
         with Session(engine) as sql_session:
             statement = select(Session_Info).where(Session_Info.id == session_id)
             result = sql_session.exec(statement).one()
+            chat_description = result.description
             chat_history = json.loads(result.chat_history)
-        return {'chat_history': chat_history}
+        return {'chat_history': chat_history, 'description': chat_description}
     except json.JSONDecodeError:
-        return {"chat_history": None}
+        return {"chat_history": None, 'description': None}
     except:
-        return {"chat_history": "Session not found"}
+        return {"chat_history": "Session not found", 'description': None}
 
 @app.post("/chat_completion/")
 def process_chat(user_chat: User_Chat):
