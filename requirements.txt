@@ -2,3 +2,7 @@ fastapi[standard]
 pydantic
 sqlmodel
 litellm
+werkzeug
+langchain
+langchain_community
+langchain-chroma>=0.1.2

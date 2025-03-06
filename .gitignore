@@ -62,3 +62,5 @@ docs/_build/
 #api key file
 
 api_key.py
+
+uploads/

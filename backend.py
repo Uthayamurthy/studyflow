@@ -1,12 +1,14 @@
 import uuid
 import json
 import os
-from fastapi import FastAPI
+import shutil
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
 from prompts import title_gen_prompt, study_ai_sys_prompt
+from werkzeug.utils import secure_filename
 from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
@@ -14,6 +16,15 @@ try:
 except:
     print("API Key not found. Please create a \"api_key.py\" file and say your key as \"gemini_key='<your_key>'\" ")
     exit(0)
+
+UPLOAD_FOLDER = "uploads/"
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'docx'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_session_folder(session_id: str) -> str:
+    return os.path.join(UPLOAD_FOLDER, session_id)
 
 origins = [
     "http://localhost",
@@ -145,3 +156,25 @@ def process_chat(user_chat: User_Chat):
         sql_session.refresh(result)
 
     return {'assistant_message': assistant_chat["content"]}
+
+@app.post("/upload_resource/{session_id}")
+async def upload_resource(session_id: str, file: UploadFile = File(...)):
+    if not allowed_file(file.filename):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    
+    if not os.path.isdir(UPLOAD_FOLDER):
+        os.mkdir(UPLOAD_FOLDER)
+    
+    if not os.path.isdir(get_session_folder(session_id)):
+        os.mkdir(get_session_folder(session_id))
+    
+    session_folder = get_session_folder(session_id)
+
+    if not os.path.exists(session_folder):
+        os.mkdir(session_folder)
+    
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(session_folder, filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
