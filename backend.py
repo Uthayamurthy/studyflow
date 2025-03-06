@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
 from prompts import title_gen_prompt, study_ai_sys_prompt
+from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
     from api_key import gemini_key
@@ -29,6 +30,10 @@ sqlite_file_name = "app_data/sessions.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 engine = create_engine(sqlite_url, echo=True)
+
+class User_Chat(BaseModel):
+    session_id: str
+    user_query: str
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -112,8 +117,12 @@ def get_chat_data(session_id: str):
     except:
         return {"chat_history": "Session not found"}
 
-@app.post("/chat_completion/{session_id}")
-def process_chat(session_id: str, user_query: str):
+@app.post("/chat_completion/")
+def process_chat(user_chat: User_Chat):
+    
+    session_id = user_chat.session_id
+    user_query = user_chat.user_query
+
     with Session(engine) as sql_session:
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
