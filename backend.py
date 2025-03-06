@@ -245,3 +245,13 @@ async def upload_resource(session_id: str, file: UploadFile = File(...)):
     process_file(filepath, filename, db, session_id)
 
     return {'message': 'File uploaded successfully !'}
+
+@app.get('/list_files/{session_id}')
+def list_files(session_id: str):
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        files = result.files_info
+        files_info = json.loads(files)
+    files_info = [{"file_id": file["file_id"], "filename": file["filename"]} for file in files_info]
+    return {"files": files_info}
