@@ -21,11 +21,26 @@ If needed, break down complex concepts, provide examples or analogies, and sugge
 
 STUDY_AI_USER_PROMPT = """
 Context from documents uploaded by user:
-{context}
+"{context}"
 User Query:
-{user_query}
+"{user_query}"
+"""
+
+CONTEXT_FILTER_PROMPT = """
+Your task is to determine if the following user query requires additional context from previously uploaded documents.
+
+Consider the following factors:
+
+    If the query is general or a follow-up to previous conversation, context may not be needed.
+    If the query asks for specific information that is unlikely to be in the chat history, context should be retrieved.
+    If unsure, prioritize accuracy and retrieve context only if essential.
+
+Respond with only 'Yes' or 'No'—no explanations.
+
+User Query: "{user_query}"
 """
 
 title_gen_prompt = Prompt(TITLE_GEN_PROMPT)
 study_ai_sys_prompt = Prompt(STUDY_AI_SYS_PROMPT)
 study_ai_user_prompt = Prompt(STUDY_AI_USER_PROMPT)
+context_filter_prompt = Prompt(CONTEXT_FILTER_PROMPT)

@@ -7,11 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
-from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt
+from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt, context_filter_prompt
 from werkzeug.utils import secure_filename
 from pydantic import BaseModel
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+from langchain_chroma import Chroma, vectorstores
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
 from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -47,7 +47,7 @@ def get_chroma_db(session_id: str):
     )
     return db
 
-def process_file(filepath: str, filename : str, db: Chroma, session_id: str):
+def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
     try:
         if filename.lower().endswith('.txt'):
             loader = TextLoader(filepath)
@@ -61,14 +61,38 @@ def process_file(filepath: str, filename : str, db: Chroma, session_id: str):
         documents = loader.load()
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         texts = text_splitter.split_documents(documents)
-        uuids = [str(uuid.uuid4()) for _ in range(len(documents))]
+        uuids = [str(uuid.uuid4()) for _ in range(len(texts))]
         db.add_documents(documents=texts, uuids=uuids)
+
+        # Generate Summary using Gemini Lite
+        full_text = "\n".join([doc.page_content for doc in texts[:3]])  # Use first few chunks for summary
+        summary_prompt = f"Summarize the following document in a concise way:\n\n{full_text}"
+        
+        response = completion(
+            model="gemini/gemini-2.0-flash-lite",
+            messages=[{"role": "user", "content": summary_prompt}]
+        )
+
+        summary = response['choices'][0]['message']['content'].strip()
+
+        # Store summary in session metadata
         with Session(engine) as sql_session:
             statement = select(Session_Info).where(Session_Info.id == session_id)
             result = sql_session.exec(statement).one()
             files_info = json.loads(result.files_info)
-            files_info.append({"file_id": str(uuid.uuid4()), "filename": filename, "uuid": uuids})
+            files_info.append({
+                "file_id": str(uuid.uuid4()),
+                "filename": filename,
+                "uuid": uuids,
+                "summary": summary
+            })
             result.files_info = json.dumps(files_info)
+
+            # Add summary to chat history (as a one-time system message)
+            chat_history = json.loads(result.chat_history)
+            chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here is a summary:\n\n{summary}"})
+            result.chat_history = json.dumps(chat_history)
+
             sql_session.add(result)
             sql_session.commit()
     except Exception as e:
@@ -79,6 +103,28 @@ def retrieve_context(query: str, db: Chroma, k: int = 3) -> str:
     response = "\n\n".join([doc.page_content for doc in docs])
     print(f'Retrieved Response: {response}')
     return response
+
+def is_context_retrieval_needed(user_query: str, chat_history: list) -> bool:
+    
+    if len(user_query.split(' ')) < 3:
+        return False
+
+    follow_up_keywords = ["what about", "tell me more", "explain further", "continue", "elaborate", "expand"]
+    if any(keyword in user_query.lower() for keyword in follow_up_keywords):
+        return False
+
+    response = completion(
+        model="gemini/gemini-2.0-flash-lite",
+        messages=[
+            {"role": "user", "content": context_filter_prompt.ingest_args(user_query=user_query)}
+        ]
+    )
+
+    decision = response['choices'][0]['message']['content'].strip().lower()
+    if decision == "yes":
+        return True
+    else:
+        return False
 
 origins = [
     "http://localhost",
@@ -199,8 +245,12 @@ def process_chat(user_chat: User_Chat):
         if len(chat_history) == 0:
             gen_description(user_query, session_id)
             chat_history.append({"role": "system", "content": study_ai_sys_prompt.ingest_args()})
-        db = get_chroma_db(session_id)
-        context = retrieve_context(user_query, db)
+        
+        if is_context_retrieval_needed(user_query, chat_history) == True:
+            db = get_chroma_db(session_id)
+            context = retrieve_context(user_query, db)
+        else:
+            context = "None"
         user_prompt = study_ai_user_prompt.ingest_args(context=context, user_query=user_query)
         print(f'User Prompt: {user_prompt}')
         user_chat = {"role": "user", "content": user_prompt}

@@ -7,5 +7,6 @@ langchain
 langchain_community
 langchain-huggingface
 chromadb
+pypdf
 langchain-chroma
 langchain-chroma>=0.1.2
