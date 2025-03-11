@@ -18,7 +18,7 @@ from sqlmodel import Field, Session, SQLModel, create_engine, select
 try:
     from api_key import gemini_key
 except:
-    print("API Key not found. Please create a \"api_key.py\" file and say your key as \"gemini_key='<your_key>'\" ")
+    print("API Key not found. Please create a \"api_key.py\" file and save your key as \"gemini_key='<your_key>'\" ")
     exit(0)
 
 UPLOAD_FOLDER = "uploads/"
