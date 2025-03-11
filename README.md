@@ -11,6 +11,7 @@ source env/bin/activate
 ```bash
 pip install -r requirements.txt
 ```
+> Note: Please create a "api_key.py" file and save your key as a string " gemini_key='<your_key>' ". If you don't have an api key, please get it from https://aistudio.google.com
 
 ### Usage Instructions for backend:
 Just run:
@@ -25,3 +26,6 @@ To get the docs for the api go to docs url:
 ```
 http://127.0.0.1:8000/docs
 ```
+
+### Usage Instructions for frontend:
+Go here: https://github.com/vicfic18/studyflow
