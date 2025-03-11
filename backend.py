@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
-from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt_full, study_ai_user_prompt_rag, context_filter_prompt
+from prompts import *
 from werkzeug.utils import secure_filename
 from pydantic import BaseModel
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -66,6 +66,13 @@ def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
         print('Done !')
         full_text = ''.join([doc.page_content for doc in document])
         file_id = str(uuid.uuid4())
+        if not os.path.isdir(f'uploads/processed/'):
+            os.mkdir(f'uploads/processed/')
+        if not os.path.isdir(f'uploads/processed/{session_id}/'):
+            os.mkdir(f'uploads/processed/{session_id}/')
+        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'w') as f:
+            file_contents = f'File Name: {filename}\n\n' + full_text
+            f.write(file_contents)
 
         with Session(engine) as sql_session:
             print(f'Tokens: {estimate_tokens(full_text)}')
@@ -334,3 +341,76 @@ def list_files(session_id: str):
         files_info = json.loads(files)
     files_info = [{"file_id": file["file_id"], "filename": file["filename"]} for file in files_info]
     return {"files": files_info}
+
+@app.get('/quick_summary/{session_id}/')
+def gen_quick_summary(session_id: str):
+    files_contents = ''
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        files = result.files_info
+        files_info = json.loads(files)
+    file_id_list = [file["file_id"] for file in files_info]
+    
+    for file_id in file_id_list:
+        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+            files_contents += f.read()
+        files_contents += '\n\n'
+    prompt = quick_summary_prompt.ingest_args(file_content=files_contents)
+    response = completion(
+        model="gemini/gemini-2.0-flash",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    summary = response['choices'][0]['message']['content'].strip()
+
+    return summary
+
+@app.get('/revision_notes/{session_id}/')
+def gen_revision_notes(session_id: str):
+    files_contents = ''
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        files = result.files_info
+        files_info = json.loads(files)
+    file_id_list = [file["file_id"] for file in files_info]
+    
+    for file_id in file_id_list:
+        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+            files_contents += f.read()
+        files_contents += '\n\n'
+    prompt = revision_prompt.ingest_args(file_content=files_contents)
+    response = completion(
+        model="gemini/gemini-2.0-flash",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    revision_notes = response['choices'][0]['message']['content'].strip()
+
+    return revision_notes
+
+@app.get('/faqs/{session_id}/')
+def gen_faqs(session_id: str):
+    files_contents = ''
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        files = result.files_info
+        files_info = json.loads(files)
+    file_id_list = [file["file_id"] for file in files_info]
+    
+    for file_id in file_id_list:
+        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+            files_contents += f.read()
+        files_contents += '\n\n'
+    prompt = faqs_prompt.ingest_args(file_content=files_contents)
+
+    response = completion(
+        model="gemini/gemini-2.0-flash",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    faqs = response['choices'][0]['message']['content'].strip()
+
+    return faqs
