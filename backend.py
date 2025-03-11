@@ -443,3 +443,37 @@ def gen_faqs(session_id: str):
         sql_session.commit()
         sql_session.refresh(result)
     return faqs
+
+@app.get('/study_plan/{session_id}/')
+def gen_study_plan(session_id: str):
+    files_contents = ''
+    with Session(engine) as sql_session:
+        statement = select(Session_Info).where(Session_Info.id == session_id)
+        result = sql_session.exec(statement).one()
+        
+        chat_history = json.loads(result.chat_history)
+
+        files = result.files_info
+        files_info = json.loads(files)
+        file_id_list = [file["file_id"] for file in files_info]
+        
+        for file_id in file_id_list:
+            with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+                files_contents += f.read()
+            files_contents += '\n\n'
+        prompt = study_plan_prompt.ingest_args(file_content=files_contents)
+
+        response = completion(
+            model="gemini/gemini-2.0-flash",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        study_plan = response['choices'][0]['message']['content'].strip()
+
+        study_plan_chat = {"role": "assistant", "content": study_plan}
+        chat_history.append(study_plan_chat)
+        result.chat_history = json.dumps(chat_history)
+        sql_session.add(result)
+        sql_session.commit()
+        sql_session.refresh(result)
+    return study_plan

@@ -111,6 +111,26 @@ REVISION NOTES:
 Return only the revision notes, no other message
 """
 
+STUDY_PLAN_PROMPT = """
+You are an expert educator and curriculum planner. Given the following extracted textbook material, create a structured and effective study plan. The study plan should be well-organized, covering key concepts, important subtopics, and relevant learning objectives. Ensure that the plan is broken down into logical study sessions with time allocations. Also, include revision schedules, key takeaways, and suggested exercises or practice questions where applicable."
+
+Here is the input text:
+{file_content}
+
+Output Format:
+
+    STUDY PLAN:
+    - Total Study Duration: (e.g., 4 weeks, 6 weeks, etc.)
+    - Weekly Breakdown:
+        Week 1: Topics covered, key concepts, study materials, exercises
+        Week 2: Topics covered, key concepts, study materials, exercises
+        … (continue for the required duration)
+    - Daily Study Schedule (optional): (if a more detailed breakdown is needed)
+    - Key Takeaways & Learning Objectives: (summarized bullet points for each section)
+    - Recommended Exercises & Practice Questions:
+    - Revision & Assessment Plan: (e.g., review sessions, self-tests, mock exams)
+"""
+
 title_gen_prompt = Prompt(TITLE_GEN_PROMPT)
 study_ai_sys_prompt = Prompt(STUDY_AI_SYS_PROMPT)
 study_ai_user_prompt_rag = Prompt(STUDY_AI_USER_PROMPT_RAG)
@@ -119,3 +139,4 @@ context_filter_prompt = Prompt(CONTEXT_FILTER_PROMPT)
 quick_summary_prompt = Prompt(QUICK_SUMMARY_PROMPT)
 faqs_prompt = Prompt(FAQs_PROMPT)
 revision_prompt = Prompt(REVISION_PROMPT)
+study_plan_prompt = Prompt(STUDY_PLAN_PROMPT)
