@@ -67,10 +67,11 @@ def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
         full_text = ''.join([doc.page_content for doc in document])
         file_id = str(uuid.uuid4())
 
-        print(f'Tokens: {estimate_tokens(full_text)}')
-        if estimate_tokens(full_text) < 100000:
-            print('---------------------------------No Rag !----------------------------------------')
-            with Session(engine) as sql_session:
+        with Session(engine) as sql_session:
+            print(f'Tokens: {estimate_tokens(full_text)}')
+            if estimate_tokens(full_text) < 100000:
+                print('---------------------------------No Rag !----------------------------------------')
+                
                 statement = select(Session_Info).where(Session_Info.id == session_id)
                 result = sql_session.exec(statement).one()
                 files_info = json.loads(result.files_info)
@@ -84,25 +85,22 @@ def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
                 chat_history = json.loads(result.chat_history)
                 chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here are it's contents:\n\n{full_text}"})
                 result.chat_history = json.dumps(chat_history)
-                sql_session.add(result)
-                sql_session.commit()
-        else:
-            print('_______________________________RAG________________________________________')
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
-            texts = text_splitter.split_documents(document)
-            uuids = [str(uuid.uuid4()) for _ in range(len(texts))]
-            db.add_documents(documents=texts, uuids=uuids)
-            
-            summary_prompt = f"Summarize the following document in a detaied manner with a title:\n\n{full_text}"
-            
-            response = completion(
-                model="gemini/gemini-2.0-flash-lite",
-                messages=[{"role": "user", "content": summary_prompt}]
-            )
+            else:
+                print('_______________________________RAG________________________________________')
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+                texts = text_splitter.split_documents(document)
+                uuids = [str(uuid.uuid4()) for _ in range(len(texts))]
+                db.add_documents(documents=texts, uuids=uuids)
+                
+                summary_prompt = f"Summarize the following document in a detaied manner with a title:\n\n{full_text}"
+                
+                response = completion(
+                    model="gemini/gemini-2.0-flash-lite",
+                    messages=[{"role": "user", "content": summary_prompt}]
+                )
 
-            summary = response['choices'][0]['message']['content'].strip()
+                summary = response['choices'][0]['message']['content'].strip()
 
-            with Session(engine) as sql_session:
                 statement = select(Session_Info).where(Session_Info.id == session_id)
                 result = sql_session.exec(statement).one()
                 files_info = json.loads(result.files_info)
@@ -119,8 +117,8 @@ def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
                 chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here is a summary:\n\n{summary}"})
                 result.chat_history = json.dumps(chat_history)
 
-                sql_session.add(result)
-                sql_session.commit()
+            sql_session.add(result)
+            sql_session.commit()
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File processing error: {e}")
