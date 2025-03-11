@@ -7,11 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from typing import List
 from litellm import completion
-from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt, context_filter_prompt
+from prompts import title_gen_prompt, study_ai_sys_prompt, study_ai_user_prompt_full, study_ai_user_prompt_rag, context_filter_prompt
 from werkzeug.utils import secure_filename
 from pydantic import BaseModel
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma, vectorstores
+from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2txtLoader
 from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -47,6 +47,9 @@ def get_chroma_db(session_id: str):
     )
     return db
 
+def estimate_tokens(text):
+    return len(text) / 4
+
 def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
     try:
         if filename.lower().endswith('.txt'):
@@ -57,51 +60,74 @@ def process_file(filepath: str, filename: str, db: Chroma, session_id: str):
             loader = Docx2txtLoader(filepath)
         else:
             raise ValueError(f"Unsupported file type: {filename}")
-
-        documents = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        texts = text_splitter.split_documents(documents)
-        uuids = [str(uuid.uuid4()) for _ in range(len(texts))]
-        db.add_documents(documents=texts, uuids=uuids)
-
-        # Generate Summary using Gemini Lite
-        full_text = "\n".join([doc.page_content for doc in texts[:3]])  # Use first few chunks for summary
-        summary_prompt = f"Summarize the following document in a concise way:\n\n{full_text}"
         
-        response = completion(
-            model="gemini/gemini-2.0-flash-lite",
-            messages=[{"role": "user", "content": summary_prompt}]
-        )
+        print('Extracting text from the given document ...')
+        document = loader.load()
+        print('Done !')
+        full_text = ''.join([doc.page_content for doc in document])
+        file_id = str(uuid.uuid4())
 
-        summary = response['choices'][0]['message']['content'].strip()
+        print(f'Tokens: {estimate_tokens(full_text)}')
+        if estimate_tokens(full_text) < 100000:
+            print('---------------------------------No Rag !----------------------------------------')
+            with Session(engine) as sql_session:
+                statement = select(Session_Info).where(Session_Info.id == session_id)
+                result = sql_session.exec(statement).one()
+                files_info = json.loads(result.files_info)
+                files_info.append({
+                    "file_id": file_id,
+                    "file_context_type": 'FULL',
+                    "filename": filename,
+                    "uuid": None
+                })
+                result.files_info = json.dumps(files_info)  
+                chat_history = json.loads(result.chat_history)
+                chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here are it's contents:\n\n{full_text}"})
+                result.chat_history = json.dumps(chat_history)
+                sql_session.add(result)
+                sql_session.commit()
+        else:
+            print('_______________________________RAG________________________________________')
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+            texts = text_splitter.split_documents(document)
+            uuids = [str(uuid.uuid4()) for _ in range(len(texts))]
+            db.add_documents(documents=texts, uuids=uuids)
+            
+            summary_prompt = f"Summarize the following document in a detaied manner with a title:\n\n{full_text}"
+            
+            response = completion(
+                model="gemini/gemini-2.0-flash-lite",
+                messages=[{"role": "user", "content": summary_prompt}]
+            )
 
-        # Store summary in session metadata
-        with Session(engine) as sql_session:
-            statement = select(Session_Info).where(Session_Info.id == session_id)
-            result = sql_session.exec(statement).one()
-            files_info = json.loads(result.files_info)
-            files_info.append({
-                "file_id": str(uuid.uuid4()),
-                "filename": filename,
-                "uuid": uuids,
-                "summary": summary
-            })
-            result.files_info = json.dumps(files_info)
+            summary = response['choices'][0]['message']['content'].strip()
 
-            # Add summary to chat history (as a one-time system message)
-            chat_history = json.loads(result.chat_history)
-            chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here is a summary:\n\n{summary}"})
-            result.chat_history = json.dumps(chat_history)
+            with Session(engine) as sql_session:
+                statement = select(Session_Info).where(Session_Info.id == session_id)
+                result = sql_session.exec(statement).one()
+                files_info = json.loads(result.files_info)
+                files_info.append({
+                    "file_id": file_id,
+                    "file_context_type": 'RAG',
+                    "filename": filename,
+                    "uuid": uuids
+                })
+                result.files_info = json.dumps(files_info)
+                result.uses_rag = True
 
-            sql_session.add(result)
-            sql_session.commit()
+                chat_history = json.loads(result.chat_history)
+                chat_history.append({"role": "user", "content": f"New file uploaded: {filename}. Here is a summary:\n\n{summary}"})
+                result.chat_history = json.dumps(chat_history)
+
+                sql_session.add(result)
+                sql_session.commit()
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"File processing error: {e}")
 
 def retrieve_context(query: str, db: Chroma, k: int = 3) -> str:
     docs = db.similarity_search(query, k=k)
     response = "\n\n".join([doc.page_content for doc in docs])
-    print(f'Retrieved Response: {response}')
     return response
 
 def is_context_retrieval_needed(user_query: str, chat_history: list) -> bool:
@@ -136,6 +162,7 @@ class Session_Info(SQLModel, table=True):
     id: str = Field(primary_key=True)
     description: str | None = Field(default="New Session")
     chat_history: str | None = Field(default="[]")
+    uses_rag: bool | None = False
     files_info: str | None = Field(default="[]")
     
 sqlite_file_name = "app_data/sessions.db"
@@ -246,13 +273,15 @@ def process_chat(user_chat: User_Chat):
             gen_description(user_query, session_id)
             chat_history.append({"role": "system", "content": study_ai_sys_prompt.ingest_args()})
         
-        if is_context_retrieval_needed(user_query, chat_history) == True:
-            db = get_chroma_db(session_id)
-            context = retrieve_context(user_query, db)
+        if result.uses_rag:
+            if is_context_retrieval_needed(user_query, chat_history) == True:
+                db = get_chroma_db(session_id)
+                context = retrieve_context(user_query, db)
+            else:
+                context = "None"
+            user_prompt = study_ai_user_prompt_rag.ingest_args(context=context, user_query=user_query)
         else:
-            context = "None"
-        user_prompt = study_ai_user_prompt.ingest_args(context=context, user_query=user_query)
-        print(f'User Prompt: {user_prompt}')
+            user_prompt = study_ai_user_prompt_full.ingest_args(user_query=user_query)
         user_chat = {"role": "user", "content": user_prompt}
         chat_history.append(user_chat)
         response = completion(
@@ -261,7 +290,6 @@ def process_chat(user_chat: User_Chat):
             )
         assistant_chat = {"role": "assistant", "content": response['choices'][0]['message']['content']}
         chat_history.append(assistant_chat)
-        print(f'Chat History: {chat_history}')
         result.chat_history = json.dumps(chat_history)
         sql_session.add(result)
         sql_session.commit()
