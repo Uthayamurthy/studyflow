@@ -334,31 +334,3 @@ def list_files(session_id: str):
         files_info = json.loads(files)
     files_info = [{"file_id": file["file_id"], "filename": file["filename"]} for file in files_info]
     return {"files": files_info}
-
-@app.delete('/delete_file/{session_id}/{file_id}')
-def delete_file(session_id: str, file_id: str):
-    with Session(engine) as sql_session:
-        statement = select(Session_Info).where(Session_Info.id == session_id)
-        result = sql_session.exec(statement).one()
-        files_info = json.loads(result.files_info)
-        file_to_delete = None
-        for file in files_info:
-            if file["file_id"] == file_id:
-                file_to_delete = file
-                break
-        if file_to_delete is None:
-            raise HTTPException(status_code=404, detail="File not found")
-        
-        session_folder = get_session_folder(session_id)
-        filepath = os.path.join(session_folder, file_to_delete["filename"])
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        
-        db = get_chroma_db(session_id)
-        db.delete(ids=file_to_delete["uuid"])
-
-        files_info.remove(file_to_delete)
-        result.files_info = json.dumps(files_info)
-        sql_session.add(result)
-        sql_session.commit()
-    return {"message": "File deleted"}
