@@ -10,8 +10,10 @@ class Prompt:
         return new_prompt
     
 TITLE_GEN_PROMPT = """
-Based on the user's initial prompt in a conversation, generate a concise and engaging title that accurately reflects the topic and intent of the discussion. Keep it clear, relevant, and attention-grabbing. Return only the title.
+Based on the user's prompt in a conversation and chat history, generate a concise and engaging title that accurately reflects the topic and intent of the discussion. Keep it clear, relevant, and attention-grabbing. Return only the title.
 Here is the user's prompt: {user_prompt}
+Here is the chat history: {chat_history}
+If the user's prompt is very generic like "Hi", "Hello", etc and chat history doesn't have enough info to determine what the conversation is for then just return "None"
 """
 
 STUDY_AI_SYS_PROMPT = """

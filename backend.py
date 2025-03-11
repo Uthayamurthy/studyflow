@@ -198,20 +198,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-def gen_description(user_query: str, session_id: str):
-    message = title_gen_prompt.ingest_args(user_prompt=user_query)
+def gen_description(chat_history: str, user_query: str, session_id: str):
+    message = title_gen_prompt.ingest_args(chat_history=chat_history, user_prompt=user_query)
     response = completion(
         model="gemini/gemini-2.0-flash-lite", 
         messages=[{"role": "user", "content": message}]
     )
     title = response['choices'][0]['message']['content']
-    with Session(engine) as sql_session:
-        statement = select(Session_Info).where(Session_Info.id == session_id)
-        result = sql_session.exec(statement).one()
-        result.description = title
-        sql_session.add(result)
-        sql_session.commit()
-        sql_session.refresh(result)
+    title = title.strip()
+    if title != 'None':
+        with Session(engine) as sql_session:
+            statement = select(Session_Info).where(Session_Info.id == session_id)
+            result = sql_session.exec(statement).one()
+            result.description = title
+            sql_session.add(result)
+            sql_session.commit()
+            sql_session.refresh(result)
 
 @app.get("/sessions_info/", response_model=List[Session_Info])
 def get_session_ids():
@@ -267,8 +269,9 @@ def process_chat(user_chat: User_Chat):
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
         chat_history = json.loads(result.chat_history)
+        if result.description == "New Session":
+            gen_description(chat_history, user_query, session_id)
         if len(chat_history) == 0:
-            gen_description(user_query, session_id)
             chat_history.append({"role": "system", "content": study_ai_sys_prompt.ingest_args()})
         
         if result.uses_rag:
