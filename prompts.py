@@ -51,9 +51,14 @@ User Query: "{user_query}"
 QUICK_SUMMARY_PROMPT = """
 Please provide a detailed summary of the following text extracted from a file. Make sure to capture all key ideas, concepts, and important details while maintaining clarity and coherence. 
 If there are any notable examples, facts, or points that need further explanation or elaboration, please include them. The goal is to condense the text while preserving its meaning and essential points.
-Here is the text:
+Here is the input text:
 {file_content}
-Return only the summary
+
+Output Format:
+SUMMARY:
+<summary>
+
+Return only the summary, no other message
 """
 
 FAQs_PROMPT = """
@@ -68,6 +73,7 @@ Here is the input text:
 {file_content}
 
 Output Format:
+FAQs:
 [Topic-1]
 Q1: [Question]
 A1:[Answer]
@@ -97,6 +103,10 @@ You are an AI assistant designed to create high-quality revision notes from text
 
 Here is the input text:
 {file_content}
+
+Output Format:
+REVISION NOTES:
+<revision-notes>
 
 Return only the revision notes, no other message
 """

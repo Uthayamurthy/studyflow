@@ -348,21 +348,31 @@ def gen_quick_summary(session_id: str):
     with Session(engine) as sql_session:
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
+        
+        chat_history = json.loads(result.chat_history)
+
         files = result.files_info
         files_info = json.loads(files)
-    file_id_list = [file["file_id"] for file in files_info]
-    
-    for file_id in file_id_list:
-        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
-            files_contents += f.read()
-        files_contents += '\n\n'
-    prompt = quick_summary_prompt.ingest_args(file_content=files_contents)
-    response = completion(
-        model="gemini/gemini-2.0-flash",
-        messages=[{"role": "user", "content": prompt}]
-    )
+        file_id_list = [file["file_id"] for file in files_info]
+        
+        for file_id in file_id_list:
+            with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+                files_contents += f.read()
+            files_contents += '\n\n'
+        prompt = quick_summary_prompt.ingest_args(file_content=files_contents)
+        response = completion(
+            model="gemini/gemini-2.0-flash",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    summary = response['choices'][0]['message']['content'].strip()
+        summary = response['choices'][0]['message']['content'].strip()
+
+        summary_chat = {"role": "assistant", "content": summary}
+        chat_history.append(summary_chat)
+        result.chat_history = json.dumps(chat_history)
+        sql_session.add(result)
+        sql_session.commit()
+        sql_session.refresh(result)
 
     return summary
 
@@ -372,21 +382,31 @@ def gen_revision_notes(session_id: str):
     with Session(engine) as sql_session:
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
+        
+        chat_history = json.loads(result.chat_history)
+        
         files = result.files_info
         files_info = json.loads(files)
-    file_id_list = [file["file_id"] for file in files_info]
-    
-    for file_id in file_id_list:
-        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
-            files_contents += f.read()
-        files_contents += '\n\n'
-    prompt = revision_prompt.ingest_args(file_content=files_contents)
-    response = completion(
-        model="gemini/gemini-2.0-flash",
-        messages=[{"role": "user", "content": prompt}]
-    )
+        file_id_list = [file["file_id"] for file in files_info]
+        
+        for file_id in file_id_list:
+            with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+                files_contents += f.read()
+            files_contents += '\n\n'
+        prompt = revision_prompt.ingest_args(file_content=files_contents)
+        response = completion(
+            model="gemini/gemini-2.0-flash",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    revision_notes = response['choices'][0]['message']['content'].strip()
+        revision_notes = response['choices'][0]['message']['content'].strip()
+
+        revision_chat = {"role": "assistant", "content": revision_notes}
+        chat_history.append(revision_chat)
+        result.chat_history = json.dumps(chat_history)
+        sql_session.add(result)
+        sql_session.commit()
+        sql_session.refresh(result)
 
     return revision_notes
 
@@ -396,21 +416,30 @@ def gen_faqs(session_id: str):
     with Session(engine) as sql_session:
         statement = select(Session_Info).where(Session_Info.id == session_id)
         result = sql_session.exec(statement).one()
+        
+        chat_history = json.loads(result.chat_history)
+
         files = result.files_info
         files_info = json.loads(files)
-    file_id_list = [file["file_id"] for file in files_info]
-    
-    for file_id in file_id_list:
-        with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
-            files_contents += f.read()
-        files_contents += '\n\n'
-    prompt = faqs_prompt.ingest_args(file_content=files_contents)
+        file_id_list = [file["file_id"] for file in files_info]
+        
+        for file_id in file_id_list:
+            with open(f'uploads/processed/{session_id}/{file_id}.txt', 'r') as f:
+                files_contents += f.read()
+            files_contents += '\n\n'
+        prompt = faqs_prompt.ingest_args(file_content=files_contents)
 
-    response = completion(
-        model="gemini/gemini-2.0-flash",
-        messages=[{"role": "user", "content": prompt}]
-    )
+        response = completion(
+            model="gemini/gemini-2.0-flash",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    faqs = response['choices'][0]['message']['content'].strip()
+        faqs = response['choices'][0]['message']['content'].strip()
 
+        faqs_chat = {"role": "assistant", "content": faqs}
+        chat_history.append(faqs_chat)
+        result.chat_history = json.dumps(chat_history)
+        sql_session.add(result)
+        sql_session.commit()
+        sql_session.refresh(result)
     return faqs
