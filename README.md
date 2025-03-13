@@ -1,10 +1,10 @@
 # Study Flow - Backend
 ## An AI Powered Study Assistant
-The Backend for studyflow. The project was built for [Zenith Hackathon](https://techclubssn.github.io/zenith).
+The Backend for studyflow. Built for [Zenith Hackathon](https://techclubssn.github.io/zenith).
 
 ### Features
 - Clarify doubts, discuss and gain valuable insights on any Academic topic 
-- Upload files (books, reference materials, research papers, etc) of any size and clarify your doubts (Uses Selective RAG) 
+- Upload PDF, DOCs and TXT files (books, reference materials, research papers, etc) of any size to provide context (Uses Selective RAG) 
 - Get instant summary, revision notes, FAQs and Study Plan in click of a button
 
 ### Tech Stack Used
