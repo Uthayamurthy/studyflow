@@ -1,5 +1,17 @@
-# Study Flow
+# Study Flow - Backend
 ## An AI Powered Study Assistant
+The Backend for studyflow. The project was built for [Zenith Hackathon](https://techclubssn.github.io/zenith).
+
+### Features
+- Clarify doubts, discuss and gain valuable insights on any Academic topic 
+- Upload files (books, reference materials, research papers, etc) of any size and clarify your doubts (Uses Selective RAG) 
+- Get instant summary, revision notes, FAQs and Study Plan in click of a button
+
+### Tech Stack Used
+- FastAPI
+- Gemini API
+- Langchain + ChromaDB (for RAG)
+- SQLite
 
 ### Installation Instruction for backend: 
 - Create an virtual environment
@@ -29,3 +41,14 @@ http://127.0.0.1:8000/docs
 
 ### Usage Instructions for frontend:
 Go here: https://github.com/vicfic18/studyflow
+
+### Screenshots
+
+#### Api Docs
+![Api Docs Screenshot](Demo/api-docs.png)
+#### Home Page
+![Home Page Screenshot](Demo/home-page.png)
+#### Demo 1
+![Demo 1 Screenshot](Demo/demo1.png)
+#### Demo 2
+![Demo 2 Screenshot](Demo/demo2.png)
